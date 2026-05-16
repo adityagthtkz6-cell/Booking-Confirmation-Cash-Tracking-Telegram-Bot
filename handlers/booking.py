@@ -9,7 +9,11 @@ from telegram.ext import ContextTypes
 import config
 from drive import drive_client
 from sheets import sheets_client
-from state import BookingSession, Step, clear_session, get_session, set_session
+from state import (
+    BookingSession, Step,
+    clear_session, get_session, set_session,
+    enqueue_session, dequeue_next, clear_queue, queue_size,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +22,23 @@ _DATE_FORMATS = ("%d %b %Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%b
 
 def _is_guide(user_id: int) -> bool:
     return user_id in config.GUIDE_USER_IDS
+
+
+async def _start_next_session(user_id: int, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Pop the next queued booking for this user and start data collection."""
+    next_session = dequeue_next(user_id)
+    if next_session is None:
+        return
+    set_session(user_id, next_session)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"➡️ *Now collecting: Booking #{next_session.booking_number}*"
+            f" | {next_session.tour_name}\n\n"
+            f"👥 How many *adults* attended?"
+        ),
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
 
 def _parse_booking_date(raw: str) -> date:
@@ -71,31 +92,38 @@ async def yes_no_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
-    existing = get_session(user_id)
-    if existing is not None:
-        await query.answer(
-            f"Please finish data entry for Booking #{existing.booking_number} first.",
-            show_alert=True,
-        )
-        return
-
     booking_date_label = _parse_booking_date(booking_date_raw).strftime("%d %b %Y")
-    session = BookingSession(
+    new_session = BookingSession(
         booking_number=booking_number,
         tour_name=tour_name,
         booking_date=booking_date_raw,
         row_index=row_index,
         step=Step.ADULTS,
     )
-    set_session(user_id, session)
 
+    existing = get_session(user_id)
+    if existing is not None:
+        # Queue this booking — will auto-start after current one completes
+        enqueue_session(user_id, new_session)
+        q = queue_size(user_id)
+        await query.edit_message_text(
+            text=(
+                f"✅ *Booking #{booking_number}* | {tour_name} | {booking_date_label}\n"
+                f"Confirmed — queued (#{q} in line, will start automatically)."
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    # No active session — start immediately
+    set_session(user_id, new_session)
     await query.edit_message_text(
         text=f"✅ *Booking #{booking_number}* | {tour_name} | {booking_date_label}\nConfirmed — collecting data...",
         parse_mode=ParseMode.MARKDOWN,
     )
     await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text=f"📋 *Booking #{booking_number}* — How many *adults* attended?",
+        text=f"📋 *Booking #{booking_number}*\n👥 How many *adults* attended?",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -304,6 +332,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 parse_mode=ParseMode.MARKDOWN,
             )
             clear_session(user_id)
+            await _start_next_session(user_id, msg.chat_id, context)
             return
 
         await status_msg.edit_text(
@@ -317,3 +346,4 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             disable_web_page_preview=True,
         )
         clear_session(user_id)
+        await _start_next_session(user_id, msg.chat_id, context)

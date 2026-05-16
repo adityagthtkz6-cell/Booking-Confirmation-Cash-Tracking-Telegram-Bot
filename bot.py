@@ -25,6 +25,7 @@ from handlers.cashier import (
 )
 from scheduler import send_daily_confirmations
 from sheets import sheets_client
+from state import clear_session, clear_queue
 
 
 async def chatid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -32,8 +33,16 @@ async def chatid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(f"Current chat ID: `{chat_id}`", parse_mode="Markdown")
 
 
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id
+    clear_session(uid)
+    clear_queue(uid)
+    await update.message.reply_text("✅ All active booking sessions and queue cleared.")
+
+
 async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    clear_session(user_id)
     if user_id not in config.GUIDE_USER_IDS and user_id not in config.CASHIER_USER_IDS:
         await update.message.reply_text("You are not authorised to use this command.")
         return
@@ -78,6 +87,7 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def trigger_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    clear_session(user_id)
     if user_id not in config.GUIDE_USER_IDS and user_id not in config.CASHIER_USER_IDS:
         await update.message.reply_text("You are not authorised to use this command.")
         return
@@ -104,6 +114,7 @@ def main() -> None:
     app = Application.builder().token(config.BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("chatid", chatid_command))
+    app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("trigger", trigger_command))
     app.add_handler(CommandHandler("dashboard", dashboard_command))
     app.add_handler(CommandHandler("cash", cash_command))
@@ -134,7 +145,7 @@ def main() -> None:
     )
 
     logger.info("Bot is polling...")
-    app.run_polling(allowed_updates=["message", "callback_query"])
+    app.run_polling(allowed_updates=["message", "callback_query"], drop_pending_updates=True)
 
 
 if __name__ == "__main__":

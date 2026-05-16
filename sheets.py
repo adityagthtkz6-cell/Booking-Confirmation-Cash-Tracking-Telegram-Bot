@@ -424,7 +424,11 @@ class SheetsClient:
             return {}
 
         today = date.today()
+        tomorrow = today + timedelta(days=1)
         month_start = today.replace(day=1)
+        # month_end covers the full calendar month including upcoming dates
+        next_month = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+        month_end = next_month - timedelta(days=1)
 
         today_confirmed = today_no_show = today_pending = 0
         today_revenue = 0.0
@@ -451,8 +455,8 @@ class SheetsClient:
             else:
                 all_pending += 1
 
-            # This month
-            if booking_date and month_start <= booking_date <= today:
+            # This month (full calendar month, including upcoming confirmed bookings)
+            if booking_date and month_start <= booking_date <= month_end:
                 if confirmed == "Yes":
                     month_confirmed += 1
                     month_revenue += amount
@@ -463,8 +467,9 @@ class SheetsClient:
                 elif confirmed == "No-show":
                     month_no_show += 1
 
-            # Today
-            if booking_date == today:
+            # Today's snapshot: covers today AND tomorrow
+            # (daily confirmations are sent today for tomorrow's tours)
+            if booking_date in (today, tomorrow):
                 if confirmed == "Yes":
                     today_confirmed += 1
                     today_revenue += amount
