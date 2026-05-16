@@ -269,7 +269,14 @@ class SheetsClient:
         return None
 
     def mark_no_show(self, row_index: int) -> None:
-        self._write_row(row_index, {"Confirmed": "No-show"})
+        self._write_row(row_index, {
+            "Confirmed": "No-show",
+            "Actual adults": "",
+            "Actual kids": "",
+            "Amount collected": "",
+            "Payment method": "",
+            "Receipt link": "",
+        })
         self._set_row_background(row_index, (0.957, 0.400, 0.400))
 
     def update_booking_confirmed(self, row_index: int, data: Dict) -> None:
