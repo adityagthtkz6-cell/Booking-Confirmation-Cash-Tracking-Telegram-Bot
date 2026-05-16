@@ -417,4 +417,83 @@ class SheetsClient:
             ).execute()
 
 
+    def get_dashboard_stats(self) -> dict:
+        """Return today, this-month, and all-time stats for the /dashboard command."""
+        rows = self._read_all_rows()
+        if not rows:
+            return {}
+
+        today = date.today()
+        month_start = today.replace(day=1)
+
+        today_confirmed = today_no_show = today_pending = 0
+        today_revenue = 0.0
+        month_confirmed = month_no_show = 0
+        month_revenue = month_cash = month_bank = 0.0
+        all_confirmed = all_no_show = all_pending = 0
+        all_revenue = 0.0
+
+        for row in rows[1:]:
+            if not row:
+                continue
+            raw_date = str(self._col("Booking date", row, "")).strip()
+            booking_date = _parse_date(raw_date)
+            confirmed = str(self._col("Confirmed", row, "")).strip()
+            amount = float(self._col("Amount collected", row, 0) or 0)
+            payment = str(self._col("Payment method", row, "")).strip()
+
+            # All time
+            if confirmed == "Yes":
+                all_confirmed += 1
+                all_revenue += amount
+            elif confirmed == "No-show":
+                all_no_show += 1
+            else:
+                all_pending += 1
+
+            # This month
+            if booking_date and month_start <= booking_date <= today:
+                if confirmed == "Yes":
+                    month_confirmed += 1
+                    month_revenue += amount
+                    if payment.lower() == "cash":
+                        month_cash += amount
+                    else:
+                        month_bank += amount
+                elif confirmed == "No-show":
+                    month_no_show += 1
+
+            # Today
+            if booking_date == today:
+                if confirmed == "Yes":
+                    today_confirmed += 1
+                    today_revenue += amount
+                elif confirmed == "No-show":
+                    today_no_show += 1
+                else:
+                    today_pending += 1
+
+        return {
+            "today": {
+                "confirmed": today_confirmed,
+                "no_show": today_no_show,
+                "pending": today_pending,
+                "revenue": today_revenue,
+            },
+            "month": {
+                "confirmed": month_confirmed,
+                "no_show": month_no_show,
+                "revenue": month_revenue,
+                "cash": month_cash,
+                "bank": month_bank,
+            },
+            "all_time": {
+                "confirmed": all_confirmed,
+                "no_show": all_no_show,
+                "pending": all_pending,
+                "revenue": all_revenue,
+            },
+        }
+
+
 sheets_client = SheetsClient()

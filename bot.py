@@ -14,6 +14,7 @@ from telegram.ext import (
 
 import config
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from handlers.booking import message_handler, payment_callback, yes_no_callback
 from handlers.cashier import (
@@ -29,6 +30,50 @@ from sheets import sheets_client
 async def chatid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     await update.message.reply_text(f"Current chat ID: `{chat_id}`", parse_mode="Markdown")
+
+
+async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if user_id not in config.GUIDE_USER_IDS and user_id not in config.CASHIER_USER_IDS:
+        await update.message.reply_text("You are not authorised to use this command.")
+        return
+    try:
+        s = sheets_client.get_dashboard_stats()
+    except Exception as exc:
+        logger.error("dashboard_command error: %s", exc, exc_info=True)
+        await update.message.reply_text("\u274c Error fetching stats. Please try again.")
+        return
+
+    t = s.get("today", {})
+    m = s.get("month", {})
+    a = s.get("all_time", {})
+
+    from datetime import date
+    month_name = date.today().strftime("%B %Y")
+
+    text = (
+        f"\U0001f4ca *Booking Dashboard*\n"
+        f"\n"
+        f"\U0001f4c5 *Today's Snapshot*\n"
+        f"\u2705 Confirmed: {t.get('confirmed', 0)}\n"
+        f"\u274c No-shows: {t.get('no_show', 0)}\n"
+        f"\u23f3 Pending: {t.get('pending', 0)}\n"
+        f"\U0001f4b0 Revenue: {config.CURRENCY} {t.get('revenue', 0):,.0f}\n"
+        f"\n"
+        f"\U0001f4c6 *This Month ({month_name})*\n"
+        f"\u2705 Confirmed: {m.get('confirmed', 0)}\n"
+        f"\u274c No-shows: {m.get('no_show', 0)}\n"
+        f"\U0001f4b5 Total Revenue: {config.CURRENCY} {m.get('revenue', 0):,.0f}\n"
+        f"\U0001f4b5 Cash: {config.CURRENCY} {m.get('cash', 0):,.0f} | "
+        f"\U0001f3e6 Bank: {config.CURRENCY} {m.get('bank', 0):,.0f}\n"
+        f"\n"
+        f"\U0001f4c8 *All Time*\n"
+        f"\u2705 Confirmed: {a.get('confirmed', 0)}\n"
+        f"\u274c No-shows: {a.get('no_show', 0)}\n"
+        f"\u23f3 Pending: {a.get('pending', 0)}\n"
+        f"\U0001f4b0 Total Revenue: {config.CURRENCY} {a.get('revenue', 0):,.0f}"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def trigger_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -60,6 +105,7 @@ def main() -> None:
 
     app.add_handler(CommandHandler("chatid", chatid_command))
     app.add_handler(CommandHandler("trigger", trigger_command))
+    app.add_handler(CommandHandler("dashboard", dashboard_command))
     app.add_handler(CommandHandler("cash", cash_command))
     app.add_handler(CommandHandler("expected", expected_command))
     app.add_handler(CommandHandler("visitors", visitors_command))
