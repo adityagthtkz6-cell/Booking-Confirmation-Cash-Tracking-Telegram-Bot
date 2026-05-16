@@ -271,9 +271,6 @@ class SheetsClient:
     def mark_no_show(self, row_index: int) -> None:
         self._write_row(row_index, {
             "Confirmed": "No-show",
-            "Expected adults": "",
-            "Expected kids": "",
-            "Expected amount": "",
             "Actual adults": "",
             "Actual kids": "",
             "Amount collected": "",
