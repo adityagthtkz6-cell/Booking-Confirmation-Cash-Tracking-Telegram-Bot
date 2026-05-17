@@ -137,27 +137,26 @@ async def collected_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text(_UNAUTHORIZED)
         return
 
-    if not context.args or len(context.args) < 2:
+    if not context.args:
         await update.message.reply_text(
-            "Usage: `/collected [guide name] [amount]`\n"
-            "Example: `/collected Ahmed Al-Rashidi 1450`",
+            "Usage: `/collected [guide name]` or `/collected [guide name] [amount]`\n"
+            "Example: `/collected Aditya Singh`",
             parse_mode=ParseMode.MARKDOWN,
         )
         return
 
+    # Check if last arg is a number (amount) or part of the name
     try:
-        amount = float(context.args[-1].replace(",", ""))
-        if amount <= 0:
+        amount_override = float(context.args[-1].replace(",", ""))
+        if amount_override <= 0:
+            raise ValueError
+        guide_name = " ".join(context.args[:-1])
+        if not guide_name:
             raise ValueError
     except ValueError:
-        await update.message.reply_text(
-            "❌ Invalid amount. The last argument must be a positive number.\n"
-            "Example: `/collected Ahmed Al-Rashidi 1450`",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        return
-
-    guide_name = " ".join(context.args[:-1])
+        # No amount provided — use full args as guide name, auto-detect amount
+        amount_override = None
+        guide_name = " ".join(context.args)
     user = update.effective_user
     cashier_username = f"@{user.username}" if user.username else f"ID:{user.id}"
 
@@ -183,6 +182,15 @@ async def collected_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except Exception as exc:
         logger.error("collected_command balance check error: %s", exc, exc_info=True)
         await update.message.reply_text("❌ Could not read guide balance. Please try again.")
+        return
+
+    # Use provided amount or fall back to full current balance
+    amount = amount_override if amount_override is not None else balance_before
+
+    if amount <= 0:
+        await update.message.reply_text(
+            f"ℹ️ {guide_name} has no uncollected cash balance."
+        )
         return
 
     try:
