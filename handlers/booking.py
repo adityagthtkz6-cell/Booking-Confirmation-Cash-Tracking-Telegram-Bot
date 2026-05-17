@@ -13,6 +13,7 @@ from state import (
     BookingSession, Step,
     clear_session, get_session, set_session,
     enqueue_session, dequeue_next, clear_queue, queue_size,
+    is_booking_active_or_queued,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,12 @@ async def yes_no_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     tour_name = str(sheets_client._col("Tour name", row_data, ""))
     booking_date_raw = str(sheets_client._col("Booking date", row_data, ""))
 
+    # Skip if already confirmed or marked no-show in the sheet
+    confirmed_status = str(sheets_client._col("Confirmed", row_data, "")).strip()
+    if confirmed_status in ("Yes", "No-show"):
+        await query.answer(f"Booking #{booking_number} already processed.", show_alert=True)
+        return
+
     if action == "no":
         try:
             sheets_client.mark_no_show(row_index)
@@ -100,6 +107,11 @@ async def yes_no_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         row_index=row_index,
         step=Step.ADULTS,
     )
+
+    # Prevent duplicate: skip if already active or in queue
+    if is_booking_active_or_queued(user_id, booking_number):
+        await query.answer(f"Booking #{booking_number} is already being processed.", show_alert=True)
+        return
 
     existing = get_session(user_id)
     if existing is not None:

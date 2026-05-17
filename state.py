@@ -58,3 +58,14 @@ def clear_queue(user_id: int) -> None:
 
 def queue_size(user_id: int) -> int:
     return len(_queues.get(user_id, []))
+
+
+def is_booking_active_or_queued(user_id: int, booking_number: str) -> bool:
+    """Return True if this booking is already being processed or waiting in queue."""
+    session = _sessions.get(user_id)
+    if session and session.booking_number == booking_number:
+        return True
+    for s in _queues.get(user_id, []):
+        if s.booking_number == booking_number:
+            return True
+    return False
