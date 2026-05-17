@@ -284,30 +284,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         status_msg = await msg.reply_text("⏳ Saving receipt...")
 
-        try:
-            tg_file = await context.bot.get_file(file_id)
-            file_bytes = bytes(await tg_file.download_as_bytearray())
-        except Exception as exc:
-            logger.error("Failed to download Telegram file: %s", exc, exc_info=True)
-            await status_msg.edit_text("❌ Failed to read the file. Please try again.")
-            return
-
-        booking_dt = _parse_booking_date(session.booking_date)
-
-        receipt_link: str
-        try:
-            await status_msg.edit_text("⏳ Uploading receipt to Google Drive...")
-            receipt_link = drive_client.upload_receipt(
-                file_bytes=file_bytes,
-                booking_number=session.booking_number,
-                booking_date=booking_dt,
-                mime_type=mime_type,
-            )
-            logger.info("Receipt uploaded to Drive for booking #%s", session.booking_number)
-        except Exception as exc:
-            logger.warning("Drive upload failed for booking #%s, using Telegram file_id: %s", session.booking_number, exc)
-            receipt_link = f"Telegram file_id: {file_id}"
-            await status_msg.edit_text("⚠️ Drive upload skipped — receipt saved via Telegram.")
+        receipt_link = f"Telegram file_id: {file_id}"
 
         try:
             sheets_client.update_booking_confirmed(
