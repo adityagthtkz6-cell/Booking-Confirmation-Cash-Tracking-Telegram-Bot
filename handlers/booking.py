@@ -168,6 +168,10 @@ async def payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     session.payment_method = "Cash" if method_key == "cash" else "Bank transfer"
     session.step = Step.RECEIPT
+    try:
+        sheets_client.update_booking_partial(session.row_index, {"Payment method": session.payment_method})
+    except Exception:
+        pass
 
     await query.edit_message_text(
         text=f"💳 Payment method: *{session.payment_method}*",
@@ -209,6 +213,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         session.adults = adults
         session.step = Step.KIDS
+        try:
+            sheets_client.update_booking_partial(session.row_index, {"Actual adults": adults})
+        except Exception:
+            pass
         await msg.reply_text(
             f"✅ Adults: *{adults}*\n\n"
             f"📋 *Booking #{session.booking_number}* — How many *kids* attended?",
@@ -226,6 +234,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         session.kids = kids
         session.step = Step.AMOUNT
+        try:
+            sheets_client.update_booking_partial(session.row_index, {"Actual kids": kids})
+        except Exception:
+            pass
         await msg.reply_text(
             f"✅ Kids: *{kids}*\n\n"
             f"📋 *Booking #{session.booking_number}* — "
@@ -246,6 +258,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         session.amount = amount
         session.step = Step.PAYMENT
+        try:
+            sheets_client.update_booking_partial(session.row_index, {"Amount collected": amount})
+        except Exception:
+            pass
         keyboard = InlineKeyboardMarkup(
             [
                 [

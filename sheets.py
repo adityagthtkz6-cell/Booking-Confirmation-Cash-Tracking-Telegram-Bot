@@ -279,6 +279,10 @@ class SheetsClient:
         })
         self._set_row_background(row_index, (0.957, 0.400, 0.400))
 
+    def update_booking_partial(self, row_index: int, fields: Dict) -> None:
+        """Write individual fields to a booking row without changing Confirmed status."""
+        self._write_row(row_index, fields)
+
     def update_booking_confirmed(self, row_index: int, data: Dict) -> None:
         self._write_row(
             row_index,
