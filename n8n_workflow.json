@@ -1,0 +1,594 @@
+{
+  "name": "Sahm Plus Bot — Booking Confirmation & Cash Tracking",
+  "nodes": [
+
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 8 AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "notes": "Fires every day at 08:00 Qatar time (set your n8n timezone to Asia/Qatar)"
+    },
+
+    {
+      "parameters": {
+        "operation": "getRows",
+        "documentId": {
+          "__rl": true,
+          "value": "1TJ03MHcBXqQWw8JRfSGPOUy1nrUhiYfXKRRy927SR5w",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Bookings Data",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-booknetic-sheet",
+      "name": "Read Booknetic Bookings",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [440, 160],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\nconst tomorrow = new Date(today);\ntomorrow.setDate(today.getDate() + 1);\nconst tomorrowStr = tomorrow.toISOString().split('T')[0];\n\nconst grouped = {};\nfor (const item of items) {\n  const row = item.json;\n  const apptDate = (row['Appointment Date'] || '').substring(0, 10);\n  const status = (row['appointment_status'] || '').trim().toLowerCase();\n  if (apptDate !== tomorrowStr || status !== 'approved') continue;\n\n  const service = (row['service_name'] || '').trim();\n  const apptId = String(row['Appointment ID'] || '');\n  const customerName = (row['Customer Name'] || '').trim();\n  const amount = parseFloat(row['app_sum_price'] || 0) || 0;\n  const adults = parseInt(row['Adult_Cnt'] || 0) || 0;\n  const kids = parseInt(row['Kids_Cnt'] || 0) || 0;\n\n  if (!grouped[service]) {\n    grouped[service] = { service, date: tomorrowStr, adults: 0, kids: 0, amount: 0, ticketIds: [], customerNames: [] };\n  }\n  grouped[service].adults += adults;\n  grouped[service].kids += kids;\n  grouped[service].amount += amount;\n  if (apptId) grouped[service].ticketIds.push(apptId);\n  if (customerName) grouped[service].customerNames.push(customerName);\n}\n\nreturn Object.values(grouped).map(g => ({ json: g }));"
+      },
+      "id": "sync-booknetic",
+      "name": "Sync & Group Booknetic Bookings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 160]
+    },
+
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Bookings",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Booking date": "={{ $json.date }}",
+            "Tour name": "={{ $json.service }}",
+            "Guide name": "Aditya Singh",
+            "Expected adults": "={{ $json.adults }}",
+            "Expected kids": "={{ $json.kids }}",
+            "Expected amount": "={{ $json.amount }}",
+            "Ticket IDs": "={{ $json.ticketIds.join(', ') }}",
+            "Customer Names": "={{ $json.customerNames.join(', ') }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "write-to-bot-sheet",
+      "name": "Write Booking to Bot Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [900, 160],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "operation": "getRows",
+        "documentId": {
+          "__rl": true,
+          "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Bookings",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-bookings",
+      "name": "Read Bookings Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [440, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\nconst tomorrow = new Date(today);\ntomorrow.setDate(today.getDate() + 1);\nconst tomorrowStr = tomorrow.toISOString().split('T')[0];\n\nconst filtered = items.filter(item => {\n  const bookingDate = item.json['Booking date'] || '';\n  const confirmed = (item.json['Confirmed'] || '').trim();\n  return bookingDate.startsWith(tomorrowStr) && confirmed === '';\n});\n\nreturn filtered;"
+      },
+      "id": "filter-tomorrows-bookings",
+      "name": "Filter Tomorrow Unconfirmed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{ $items().length }}", "operation": "larger", "value2": 0 }]
+        }
+      },
+      "id": "has-bookings-check",
+      "name": "Has Bookings?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-bookings",
+      "name": "Loop Each Booking",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 220]
+    },
+
+    {
+      "parameters": {
+        "chatId": "-5172302739",
+        "text": "=🎯 *Daily Booking Confirmation — {{ $json['Booking date'] }}*\n\n📌 Booking: *#{{ $json['Booking number'] }}*\n🚢 Tour: {{ $json['Tour name'] }}\n👤 Guide: {{ $json['Guide name'] }}\n👥 Expected Adults: {{ $json['Expected adults'] }}\n🧒 Expected Kids: {{ $json['Expected kids'] }}\n💰 Expected Amount: QAR {{ $json['Expected amount'] }}\n\nDid this booking happen?",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "reply_markup": {
+            "inline_keyboard": [
+              [
+                { "text": "✅ YES", "callback_data": "=confirm_{{ $json['Booking number'] }}_yes" },
+                { "text": "❌ NO", "callback_data": "=confirm_{{ $json['Booking number'] }}_no" }
+              ]
+            ]
+          }
+        }
+      },
+      "id": "send-booking-card",
+      "name": "Send Booking Card",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1340, 220],
+      "credentials": {
+        "telegramApi": { "id": "sahm-plus-telegram-cred", "name": "Telegram Bot" }
+      }
+    },
+
+    {
+      "parameters": {
+        "updates": ["callback_query", "message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-webhook",
+      "name": "Telegram Webhook (Button Taps & Messages)",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 600],
+      "webhookId": "sahm-plus-bot-webhook",
+      "credentials": {
+        "telegramApi": { "id": "sahm-plus-telegram-cred", "name": "Telegram Bot" }
+      }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const data = items[0].json;\nconst isCallbackQuery = !!data.callback_query;\nconst isMessage = !!data.message;\n\nif (isCallbackQuery) {\n  const cbData = data.callback_query.data || '';\n  const match = cbData.match(/^confirm_(.+)_(yes|no)$/);\n  if (match) {\n    return [{ json: {\n      type: 'confirmation',\n      action: match[2],\n      booking_number: match[1],\n      chat_id: data.callback_query.message.chat.id,\n      message_id: data.callback_query.message.message_id,\n      from_user: data.callback_query.from.first_name,\n      callback_query_id: data.callback_query.id\n    }}];\n  }\n  if (cbData.startsWith('payment_')) {\n    const parts = cbData.split('_');\n    const method = parts[parts.length - 1];\n    const bn = parts.slice(1, parts.length - 1).join('_');\n    return [{ json: {\n      type: 'payment',\n      method: method === 'cash' ? 'Cash' : 'Bank transfer',\n      booking_number: bn,\n      chat_id: data.callback_query.message.chat.id,\n      callback_query_id: data.callback_query.id\n    }}];\n  }\n}\n\nif (isMessage) {\n  const text = (data.message.text || '').trim();\n  const chatId = data.message.chat.id;\n  if (text === '/dashboard') {\n    return [{ json: { type: 'dashboard', chat_id: chatId }}];\n  }\n  if (text.startsWith('/cash ')) {\n    return [{ json: { type: 'cash', guide_name: text.replace('/cash ', '').trim(), chat_id: chatId }}];\n  }\n  if (text.startsWith('/collected ')) {\n    return [{ json: { type: 'collected', guide_name: text.replace('/collected ', '').trim(), chat_id: chatId }}];\n  }\n  return [{ json: { type: 'message', text, chat_id: chatId }}];\n}\n\nreturn [{ json: { type: 'unknown' }}];"
+      },
+      "id": "route-update",
+      "name": "Route Incoming Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 600]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.type }}", "operation": "equal", "value2": "confirmation" }]
+        }
+      },
+      "id": "is-confirmation",
+      "name": "Is YES/NO Tap?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 500]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.action }}", "operation": "equal", "value2": "yes" }]
+        }
+      },
+      "id": "is-yes",
+      "name": "YES or NO?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Booking number": "={{ $json.booking_number }}",
+            "Confirmed": "Yes"
+          },
+          "matchingColumns": ["Booking number"]
+        },
+        "options": {}
+      },
+      "id": "mark-yes",
+      "name": "Mark Confirmed (YES)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1120, 420],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "=✅ Booking *#{{ $json.booking_number }}* confirmed!\n\n👥 How many *adults* attended?",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "ask-adults",
+      "name": "Ask Adults Count",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1340, 420],
+      "credentials": {
+        "telegramApi": { "id": "sahm-plus-telegram-cred", "name": "Telegram Bot" }
+      }
+    },
+
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Booking number": "={{ $json.booking_number }}",
+            "Confirmed": "No-show"
+          },
+          "matchingColumns": ["Booking number"]
+        },
+        "options": {}
+      },
+      "id": "mark-no-show",
+      "name": "Mark No-Show (NO)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1120, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "=🔴 Booking *#{{ $json.booking_number }}* marked as *No-show*.",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "confirm-no-show",
+      "name": "Confirm No-Show",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1340, 600],
+      "credentials": {
+        "telegramApi": { "id": "sahm-plus-telegram-cred", "name": "Telegram Bot" }
+      }
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.type }}", "operation": "equal", "value2": "dashboard" }]
+        }
+      },
+      "id": "is-dashboard",
+      "name": "Is /dashboard?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 700]
+    },
+
+    {
+      "parameters": {
+        "operation": "getRows",
+        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "options": {}
+      },
+      "id": "read-all-for-dashboard",
+      "name": "Read All Bookings (Dashboard)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [900, 700],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const today = new Date().toISOString().split('T')[0];\nconst thisMonth = today.substring(0, 7);\n\nlet todayConfirmed = 0, todayNoShow = 0, todayRevenue = 0;\nlet monthConfirmed = 0, monthNoShow = 0, monthRevenue = 0, monthCash = 0, monthBank = 0;\nlet allConfirmed = 0, allRevenue = 0;\n\nfor (const item of items) {\n  const row = item.json;\n  const bd = (row['Booking date'] || '').substring(0, 10);\n  const confirmed = (row['Confirmed'] || '').trim();\n  const amount = parseFloat(row['Amount collected'] || 0) || 0;\n  const payment = (row['Payment method'] || '').toLowerCase();\n\n  if (confirmed === 'Yes') {\n    allConfirmed++;\n    allRevenue += amount;\n    if (bd === today) { todayConfirmed++; todayRevenue += amount; }\n    if (bd.startsWith(thisMonth)) {\n      monthConfirmed++; monthRevenue += amount;\n      if (payment === 'cash') monthCash += amount;\n      else monthBank += amount;\n    }\n  }\n  if (confirmed === 'No-show') {\n    if (bd === today) todayNoShow++;\n    if (bd.startsWith(thisMonth)) monthNoShow++;\n  }\n}\n\nconst msg = `📊 *Booking Dashboard*\\n\\n` +\n  `📅 *Today's Snapshot*\\n` +\n  `✅ Confirmed: ${todayConfirmed}\\n` +\n  `❌ No-shows: ${todayNoShow}\\n` +\n  `💰 Revenue: QAR ${todayRevenue.toLocaleString()}\\n\\n` +\n  `📆 *This Month*\\n` +\n  `✅ Confirmed: ${monthConfirmed}\\n` +\n  `❌ No-shows: ${monthNoShow}\\n` +\n  `💰 Total Revenue: QAR ${monthRevenue.toLocaleString()}\\n` +\n  `💵 Cash: QAR ${monthCash.toLocaleString()} | 🏦 Bank: QAR ${monthBank.toLocaleString()}\\n\\n` +\n  `📈 *All Time*\\n` +\n  `✅ Confirmed: ${allConfirmed}\\n` +\n  `💰 Total Revenue: QAR ${allRevenue.toLocaleString()}`;\n\nreturn [{ json: { message: msg, chat_id: items[0].json.chat_id || 'UNKNOWN' }}];"
+      },
+      "id": "build-dashboard",
+      "name": "Calculate Dashboard Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 700]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "send-dashboard",
+      "name": "Send Dashboard",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1340, 700],
+      "credentials": {
+        "telegramApi": { "id": "sahm-plus-telegram-cred", "name": "Telegram Bot" }
+      }
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.type }}", "operation": "equal", "value2": "cash" }]
+        }
+      },
+      "id": "is-cash-command",
+      "name": "Is /cash Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 900]
+    },
+
+    {
+      "parameters": {
+        "operation": "getRows",
+        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "options": {}
+      },
+      "id": "read-for-cash",
+      "name": "Read Bookings (Cash Check)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [900, 860],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const guideName = items[0].json.guide_name || '';\nconst chatId = items[0].json.chat_id;\n\nlet total = 0, count = 0;\nfor (const item of items) {\n  const row = item.json;\n  const guide = (row['Guide name'] || '').trim().toLowerCase();\n  const confirmed = (row['Confirmed'] || '').trim();\n  const payment = (row['Payment method'] || '').trim().toLowerCase();\n  const collected = (row['Collected by cashier'] || '').trim().toLowerCase();\n  const amount = parseFloat(row['Amount collected'] || 0) || 0;\n\n  if (guide === guideName.toLowerCase() && confirmed === 'Yes' && payment === 'cash' && (!collected || collected === 'no')) {\n    total += amount;\n    count++;\n  }\n}\n\nconst msg = total > 0\n  ? `💰 *${guideName}* currently holds *QAR ${total.toLocaleString()}* in cash (${count} booking${count !== 1 ? 's' : ''}).`\n  : `ℹ️ *${guideName}* has no uncollected cash.`;\n\nreturn [{ json: { message: msg, chat_id: chatId }}];"
+      },
+      "id": "calc-cash-balance",
+      "name": "Calculate Cash Balance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 860]
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "send-cash-balance",
+      "name": "Send Cash Balance",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1340, 860],
+      "credentials": {
+        "telegramApi": { "id": "sahm-plus-telegram-cred", "name": "Telegram Bot" }
+      }
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.type }}", "operation": "equal", "value2": "collected" }]
+        }
+      },
+      "id": "is-collected-command",
+      "name": "Is /collected Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 1060]
+    },
+
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Cash Collections Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Collection date": "={{ new Date().toISOString().split('T')[0] }}",
+            "Guide name": "={{ $json.guide_name }}",
+            "Amount collected": "=collected",
+            "Collected by": "=n8n-workflow",
+            "Timestamp": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-cash-collection",
+      "name": "Log Cash Collection",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [900, 1060],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "sahm-plus-google-cred", "name": "Google Sheets" }
+      }
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "=✅ Cash collection recorded for *{{ $json.guide_name }}*.\nGuide's balance has been reset to QAR 0.",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "confirm-collection",
+      "name": "Confirm Collection",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1120, 1060],
+      "credentials": {
+        "telegramApi": { "id": "sahm-plus-telegram-cred", "name": "Telegram Bot" }
+      }
+    }
+
+  ],
+
+  "connections": {
+    "Daily 8 AM Trigger": {
+      "main": [[{ "node": "Read Booknetic Bookings", "type": "main", "index": 0 }]]
+    },
+    "Read Booknetic Bookings": {
+      "main": [[{ "node": "Sync & Group Booknetic Bookings", "type": "main", "index": 0 }]]
+    },
+    "Sync & Group Booknetic Bookings": {
+      "main": [[{ "node": "Write Booking to Bot Sheet", "type": "main", "index": 0 }]]
+    },
+    "Write Booking to Bot Sheet": {
+      "main": [[{ "node": "Read Bookings Sheet", "type": "main", "index": 0 }]]
+    },
+    "Read Bookings Sheet": {
+      "main": [[{ "node": "Filter Tomorrow Unconfirmed", "type": "main", "index": 0 }]]
+    },
+    "Filter Tomorrow Unconfirmed": {
+      "main": [[{ "node": "Has Bookings?", "type": "main", "index": 0 }]]
+    },
+    "Has Bookings?": {
+      "main": [
+        [{ "node": "Loop Each Booking", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Loop Each Booking": {
+      "main": [
+        [{ "node": "Send Booking Card", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Send Booking Card": {
+      "main": [[{ "node": "Loop Each Booking", "type": "main", "index": 0 }]]
+    },
+    "Telegram Webhook (Button Taps & Messages)": {
+      "main": [[{ "node": "Route Incoming Update", "type": "main", "index": 0 }]]
+    },
+    "Route Incoming Update": {
+      "main": [[
+        { "node": "Is YES/NO Tap?", "type": "main", "index": 0 },
+        { "node": "Is /dashboard?", "type": "main", "index": 0 },
+        { "node": "Is /cash Command?", "type": "main", "index": 0 },
+        { "node": "Is /collected Command?", "type": "main", "index": 0 }
+      ]]
+    },
+    "Is YES/NO Tap?": {
+      "main": [
+        [{ "node": "YES or NO?", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "YES or NO?": {
+      "main": [
+        [{ "node": "Mark Confirmed (YES)", "type": "main", "index": 0 }],
+        [{ "node": "Mark No-Show (NO)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Confirmed (YES)": {
+      "main": [[{ "node": "Ask Adults Count", "type": "main", "index": 0 }]]
+    },
+    "Mark No-Show (NO)": {
+      "main": [[{ "node": "Confirm No-Show", "type": "main", "index": 0 }]]
+    },
+    "Is /dashboard?": {
+      "main": [
+        [{ "node": "Read All Bookings (Dashboard)", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Read All Bookings (Dashboard)": {
+      "main": [[{ "node": "Calculate Dashboard Stats", "type": "main", "index": 0 }]]
+    },
+    "Calculate Dashboard Stats": {
+      "main": [[{ "node": "Send Dashboard", "type": "main", "index": 0 }]]
+    },
+    "Is /cash Command?": {
+      "main": [
+        [{ "node": "Read Bookings (Cash Check)", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Read Bookings (Cash Check)": {
+      "main": [[{ "node": "Calculate Cash Balance", "type": "main", "index": 0 }]]
+    },
+    "Calculate Cash Balance": {
+      "main": [[{ "node": "Send Cash Balance", "type": "main", "index": 0 }]]
+    },
+    "Is /collected Command?": {
+      "main": [
+        [{ "node": "Log Cash Collection", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Log Cash Collection": {
+      "main": [[{ "node": "Confirm Collection", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Qatar"
+  },
+  "tags": [],
+  "meta": {
+    "notes": "SETUP REQUIRED: Replace all YOUR_* placeholders before activating.\n1. 1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0 — the ID from your Google Sheet URL\n2. YOUR_TELEGRAM_GROUP_ID — your Telegram group chat ID (negative number)\n3. sahm-plus-google-cred — set up Google Sheets OAuth2 credential in n8n\n4. sahm-plus-telegram-cred — set up Telegram Bot credential in n8n with your bot token\n\nNOTE: The multi-step data collection (adults → kids → amount → payment → receipt)\nrequires session state which is handled by the Python bot. In n8n, after the guide\ntaps YES, the flow asks for adults only. For full multi-step flow, use the Python bot."
+  }
+}
