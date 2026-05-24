@@ -428,6 +428,38 @@ class SheetsClient:
             ).execute()
 
 
+    def get_all_booking_numbers(self) -> List[str]:
+        """Return all existing booking numbers from the Bookings sheet."""
+        rows = self._read_all_rows()
+        col_map = self._col_map_cached()
+        bn_idx = col_map.get("Booking number")
+        if bn_idx is None:
+            return []
+        result = []
+        for row in rows[1:]:
+            if bn_idx < len(row) and str(row[bn_idx]).strip():
+                result.append(str(row[bn_idx]).strip())
+        return result
+
+    @_retry_on_api_error
+    def append_booking_row(self, data: Dict) -> None:
+        """Append a new booking row to the Bookings sheet."""
+        col_map = self._col_map_cached()
+        max_col = max(col_map.values()) if col_map else 0
+        row = [""] * (max_col + 1)
+        for col_name, value in data.items():
+            idx = col_map.get(col_name)
+            if idx is not None:
+                row[idx] = value
+        self.service.spreadsheets().values().append(
+            spreadsheetId=config.SHEET_ID,
+            range=f"{config.BOOKINGS_SHEET_NAME}!A:A",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [row]},
+        ).execute()
+        logger.info("Appended new booking row: %s", data.get("Booking number"))
+
     def get_dashboard_stats(self) -> dict:
         """Return today, this-month, and all-time stats for the /dashboard command."""
         rows = self._read_all_rows()

@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 import config
 from sheets import sheets_client
+from booknetic_sync import sync_tomorrow_to_bot_sheet
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,13 @@ async def send_daily_confirmations(context: ContextTypes.DEFAULT_TYPE, chat_id_o
 
     chat_id = chat_id_override if chat_id_override is not None else config.TELEGRAM_GROUP_ID
     logger.info("Using chat_id: %s", chat_id)
+
+    try:
+        synced = sync_tomorrow_to_bot_sheet()
+        if synced > 0:
+            logger.info("Booknetic sync: added %d new booking(s) to bot sheet", synced)
+    except Exception as exc:
+        logger.warning("Booknetic sync failed (non-fatal): %s", exc)
 
     try:
         bookings = sheets_client.get_tomorrows_bookings()
