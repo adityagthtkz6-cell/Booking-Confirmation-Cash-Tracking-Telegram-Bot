@@ -57,7 +57,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0",
+          "value": "1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM",
           "mode": "id"
         },
         "sheetName": {
@@ -95,7 +95,7 @@
         "operation": "getRows",
         "documentId": {
           "__rl": true,
-          "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0",
+          "value": "1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM",
           "mode": "id"
         },
         "sheetName": {
@@ -233,7 +233,7 @@
     {
       "parameters": {
         "operation": "update",
-        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "documentId": { "__rl": true, "value": "1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
         "columns": {
           "mappingMode": "defineBelow",
@@ -274,7 +274,7 @@
     {
       "parameters": {
         "operation": "update",
-        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "documentId": { "__rl": true, "value": "1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
         "columns": {
           "mappingMode": "defineBelow",
@@ -328,7 +328,7 @@
     {
       "parameters": {
         "operation": "getRows",
-        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "documentId": { "__rl": true, "value": "1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
         "options": {}
       },
@@ -385,7 +385,7 @@
     {
       "parameters": {
         "operation": "getRows",
-        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "documentId": { "__rl": true, "value": "1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
         "options": {}
       },
@@ -442,7 +442,7 @@
     {
       "parameters": {
         "operation": "append",
-        "documentId": { "__rl": true, "value": "1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0", "mode": "id" },
+        "documentId": { "__rl": true, "value": "1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Cash Collections Log", "mode": "name" },
         "columns": {
           "mappingMode": "defineBelow",
@@ -589,6 +589,6 @@
   },
   "tags": [],
   "meta": {
-    "notes": "SETUP REQUIRED: Replace all YOUR_* placeholders before activating.\n1. 1DqnMl10jJYuyvuSAr47VjanjRMv0RlxL23q9EQCNNN0 — the ID from your Google Sheet URL\n2. YOUR_TELEGRAM_GROUP_ID — your Telegram group chat ID (negative number)\n3. sahm-plus-google-cred — set up Google Sheets OAuth2 credential in n8n\n4. sahm-plus-telegram-cred — set up Telegram Bot credential in n8n with your bot token\n\nNOTE: The multi-step data collection (adults → kids → amount → payment → receipt)\nrequires session state which is handled by the Python bot. In n8n, after the guide\ntaps YES, the flow asks for adults only. For full multi-step flow, use the Python bot."
+    "notes": "SETUP REQUIRED: Replace all YOUR_* placeholders before activating.\n1. 1AS88y3VBPyrfpmC4ippKnAxp524etiXTAg6fTFk-jmM — the ID from your Google Sheet URL\n2. YOUR_TELEGRAM_GROUP_ID — your Telegram group chat ID (negative number)\n3. sahm-plus-google-cred — set up Google Sheets OAuth2 credential in n8n\n4. sahm-plus-telegram-cred — set up Telegram Bot credential in n8n with your bot token\n\nNOTE: The multi-step data collection (adults → kids → amount → payment → receipt)\nrequires session state which is handled by the Python bot. In n8n, after the guide\ntaps YES, the flow asks for adults only. For full multi-step flow, use the Python bot."
   }
 }
