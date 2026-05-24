@@ -381,12 +381,17 @@ class SheetsClient:
         collection_date: str,
         timestamp: str,
     ) -> None:
+        from datetime import datetime as _dt
+        try:
+            readable_date = _dt.strptime(collection_date, "%Y-%m-%d").strftime("%d %b %Y")
+        except ValueError:
+            readable_date = collection_date
         self.service.spreadsheets().values().append(
             spreadsheetId=config.SHEET_ID,
             range=f"{config.COLLECTIONS_SHEET_NAME}!A:E",
-            valueInputOption="USER_ENTERED",
+            valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
-            body={"values": [[collection_date, guide_name, amount, cashier_username, timestamp]]},
+            body={"values": [[readable_date, guide_name, amount, cashier_username, timestamp]]},
         ).execute()
 
     def guide_exists(self, guide_name: str) -> bool:
