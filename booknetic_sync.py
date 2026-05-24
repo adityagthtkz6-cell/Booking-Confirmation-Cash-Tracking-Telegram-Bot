@@ -1,7 +1,7 @@
 """
 booknetic_sync.py
-Reads tomorrow's approved appointments from the Booknetic Bookings Google Sheet,
-groups them by tour/service, and writes new rows to the bot's Bookings sheet.
+Reads approved appointments from the Booknetic Bookings Google Sheet,
+groups them by date+tour/service, and writes new rows to the bot's Bookings sheet.
 """
 import logging
 import re
@@ -224,5 +224,122 @@ def sync_tomorrow_to_bot_sheet() -> int:
             added += 1
         except Exception as exc:
             logger.error("Failed to write booking %s to bot sheet: %s", bn, exc)
+
+    return added
+
+
+def sync_all_to_bot_sheet(days_back: int = 30) -> int:
+    """
+    Full sync: pull ALL approved Booknetic bookings (from days_back days ago
+    through all future dates), group by date+tour, and add missing rows to the
+    bot's Bookings sheet.
+    Returns total number of new rows added.
+    """
+    cutoff = date.today() - timedelta(days=days_back)
+
+    svc = _booknetic_service()
+    try:
+        result = svc.spreadsheets().values().get(
+            spreadsheetId=BOOKNETIC_SHEET_ID,
+            range=f"{BOOKINGS_DATA_TAB}!A1:M5000",
+        ).execute()
+    except Exception as exc:
+        logger.error("Failed to read Booknetic sheet for full sync: %s", exc)
+        return 0
+
+    rows = result.get("values", [])
+    if len(rows) < 2:
+        return 0
+
+    headers = rows[0]
+
+    def col(row: list, name: str, default: str = "") -> str:
+        try:
+            idx = headers.index(name)
+            return row[idx] if idx < len(row) else default
+        except ValueError:
+            return default
+
+    guides = _get_guide_list()
+    default_guide = guides[0]["name"] if guides else "Supervisor"
+
+    grouped: Dict[str, Dict] = {}
+
+    for row in rows[1:]:
+        appt_date_str = col(row, "Appointment Date", "")
+        if not appt_date_str:
+            continue
+        try:
+            appt_date = date.fromisoformat(appt_date_str[:10])
+        except ValueError:
+            continue
+        if appt_date < cutoff:
+            continue
+
+        status = col(row, "appointment_status", "").strip().lower()
+        if status != "approved":
+            continue
+
+        extra_list = col(row, "app_extra_list", "")
+        amount_str = col(row, "app_sum_price", "")
+
+        service, adults, kids = _parse_extra_list(extra_list)
+        amount = _parse_amount(amount_str)
+
+        key = f"{appt_date_str[:10]}||{service}"
+        if key not in grouped:
+            grouped[key] = {
+                "service": service,
+                "date": appt_date_str[:10],
+                "adults": 0,
+                "kids": 0,
+                "amount": 0.0,
+            }
+        grouped[key]["adults"] += adults
+        grouped[key]["kids"] += kids
+        grouped[key]["amount"] += amount
+
+    if not grouped:
+        logger.info("No approved Booknetic bookings found for full sync")
+        return 0
+
+    existing_rows = sheets_client._read_all_rows()
+    existing_keys = set()
+    if existing_rows:
+        col_map = sheets_client._col_map_cached()
+        bn_idx = col_map.get("Booking date")
+        tn_idx = col_map.get("Tour name")
+        for r in existing_rows[1:]:
+            d = str(r[bn_idx]).strip() if bn_idx is not None and bn_idx < len(r) else ""
+            t = str(r[tn_idx]).strip().lower() if tn_idx is not None and tn_idx < len(r) else ""
+            if d and t:
+                existing_keys.add(f"{d}||{t}")
+
+    added = 0
+    for key, data in sorted(grouped.items()):
+        date_str = data["date"]
+        service = data["service"]
+        lookup_key = f"{date_str}||{service.strip().lower()}"
+        if lookup_key in existing_keys:
+            logger.info("Already exists: %s — %s", date_str, service)
+            continue
+
+        bn = _next_booking_number()
+        new_row = {
+            "Booking number": bn,
+            "Booking date": date_str,
+            "Tour name": service,
+            "Guide name": default_guide,
+            "Expected adults": data["adults"],
+            "Expected kids": data["kids"],
+            "Expected amount": round(data["amount"], 2),
+        }
+        try:
+            sheets_client.append_booking_row(new_row)
+            existing_keys.add(lookup_key)
+            logger.info("Full sync added %s: %s on %s", bn, service, date_str)
+            added += 1
+        except Exception as exc:
+            logger.error("Full sync failed for %s on %s: %s", service, date_str, exc)
 
     return added

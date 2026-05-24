@@ -24,6 +24,7 @@ from handlers.cashier import (
     visitors_command,
 )
 from scheduler import send_daily_confirmations
+from booknetic_sync import sync_all_to_bot_sheet
 from sheets import sheets_client
 from state import clear_session, clear_queue
 
@@ -85,6 +86,27 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
+async def sync_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if user_id not in config.GUIDE_USER_IDS and user_id not in config.CASHIER_USER_IDS:
+        await update.message.reply_text("You are not authorised to use this command.")
+        return
+    await update.message.reply_text("🔄 Syncing all Booknetic bookings to sheet...")
+    try:
+        added = sync_all_to_bot_sheet(days_back=30)
+        if added > 0:
+            await update.message.reply_text(
+                f"✅ Sync complete — {added} new booking row(s) added to the sheet."
+            )
+        else:
+            await update.message.reply_text(
+                "✅ Sync complete — sheet is already up to date. No new rows added."
+            )
+    except Exception as exc:
+        logger.error("sync_command error: %s", exc, exc_info=True)
+        await update.message.reply_text("❌ Sync failed. Please try again.")
+
+
 async def trigger_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     clear_session(user_id)
@@ -116,6 +138,7 @@ def main() -> None:
     app.add_handler(CommandHandler("chatid", chatid_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("trigger", trigger_command))
+    app.add_handler(CommandHandler("sync", sync_command))
     app.add_handler(CommandHandler("dashboard", dashboard_command))
     app.add_handler(CommandHandler("cash", cash_command))
     app.add_handler(CommandHandler("expected", expected_command))
