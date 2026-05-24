@@ -54,9 +54,29 @@ async def send_daily_confirmations(context: ContextTypes.DEFAULT_TYPE, chat_id_o
     for booking in bookings:
         bn = booking["booking_number"]
         guide_line = f"👤 Guide: {booking['guide_name']}\n" if booking.get("guide_name") else ""
+        adults = booking.get("expected_adults", 0)
+        kids = booking.get("expected_kids", 0)
+        amount = booking.get("expected_amount", 0)
+        pax_line = f"👥 Expected: {adults} adults"
+        if kids:
+            pax_line += f", {kids} kids"
+        pax_line += f" | � QAR {amount:,.0f}\n"
+        customer_names = booking.get("customer_names", "")
+        ticket_ids = booking.get("ticket_ids", "")
+        customers_line = ""
+        if customer_names:
+            names_list = [n.strip() for n in customer_names.split(",") if n.strip()]
+            ids_list = [i.strip() for i in ticket_ids.split(",") if i.strip()] if ticket_ids else []
+            customers_line = "🎫 *Tickets:*\n"
+            for idx, name in enumerate(names_list):
+                tid = ids_list[idx] if idx < len(ids_list) else ""
+                ticket_ref = f" _(#{tid})_" if tid else ""
+                customers_line += f"  • {name}{ticket_ref}\n"
         text = (
-            f"📌 *Booking #{bn}* | {booking['tour_name']} | {booking['booking_date']}\n"
+            f"�📌 *Booking #{bn}* | {booking['tour_name']} | {booking['booking_date']}\n"
             f"{guide_line}"
+            f"{pax_line}"
+            f"{customers_line}"
             f"Did this booking happen?"
         )
         keyboard = InlineKeyboardMarkup(

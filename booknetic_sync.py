@@ -178,18 +178,36 @@ def sync_tomorrow_to_bot_sheet() -> int:
         if status != "approved":
             continue
 
-        extra_list = col(row, "app_extra_list", "")
+        service = col(row, "service_name", "").strip() or _parse_extra_list(col(row, "app_extra_list", ""))[0]
         amount_str = col(row, "app_sum_price", "")
-
-        service, adults, kids = _parse_extra_list(extra_list)
         amount = _parse_amount(amount_str)
 
+        try:
+            adults = int(col(row, "Adult_Cnt", "0") or 0)
+            kids = int(col(row, "Kids_Cnt", "0") or 0)
+        except ValueError:
+            _, adults, kids = _parse_extra_list(col(row, "app_extra_list", ""))
+
+        if adults == 0 and kids == 0:
+            _, adults, kids = _parse_extra_list(col(row, "app_extra_list", ""))
+
+        appt_id = col(row, "Appointment ID", "")
+        customer_name = col(row, "Customer Name", "")
+
         if service not in grouped:
-            grouped[service] = {"service": service, "adults": 0, "kids": 0, "amount": 0.0}
+            grouped[service] = {
+                "service": service,
+                "adults": 0, "kids": 0, "amount": 0.0,
+                "ticket_ids": [], "customer_names": [],
+            }
 
         grouped[service]["adults"] += adults
         grouped[service]["kids"] += kids
         grouped[service]["amount"] += amount
+        if appt_id:
+            grouped[service]["ticket_ids"].append(str(appt_id))
+        if customer_name:
+            grouped[service]["customer_names"].append(customer_name)
 
     if not grouped:
         logger.info("No approved Booknetic bookings found for %s", tomorrow_str)
@@ -213,13 +231,16 @@ def sync_tomorrow_to_bot_sheet() -> int:
             "Expected adults": data["adults"],
             "Expected kids": data["kids"],
             "Expected amount": round(data["amount"], 2),
+            "Ticket IDs": ", ".join(data["ticket_ids"]),
+            "Customer Names": ", ".join(dict.fromkeys(data["customer_names"])),
         }
 
         try:
             sheets_client.append_booking_row(new_row)
             logger.info(
-                "Synced booking %s: %s | %d adults, %d kids, QAR %.0f",
+                "Synced booking %s: %s | %d adults, %d kids, QAR %.0f | tickets: %s",
                 bn, service, data["adults"], data["kids"], data["amount"],
+                ", ".join(data["ticket_ids"]),
             )
             added += 1
         except Exception as exc:
@@ -280,24 +301,36 @@ def sync_all_to_bot_sheet(days_back: int = 30) -> int:
         if status != "approved":
             continue
 
-        extra_list = col(row, "app_extra_list", "")
         amount_str = col(row, "app_sum_price", "")
-
-        service, adults, kids = _parse_extra_list(extra_list)
+        service = col(row, "service_name", "").strip() or _parse_extra_list(col(row, "app_extra_list", ""))[0]
         amount = _parse_amount(amount_str)
+
+        try:
+            adults = int(col(row, "Adult_Cnt", "0") or 0)
+            kids = int(col(row, "Kids_Cnt", "0") or 0)
+        except ValueError:
+            _, adults, kids = _parse_extra_list(col(row, "app_extra_list", ""))
+        if adults == 0 and kids == 0:
+            _, adults, kids = _parse_extra_list(col(row, "app_extra_list", ""))
+
+        appt_id = col(row, "Appointment ID", "")
+        customer_name = col(row, "Customer Name", "")
 
         key = f"{appt_date_str[:10]}||{service}"
         if key not in grouped:
             grouped[key] = {
                 "service": service,
                 "date": appt_date_str[:10],
-                "adults": 0,
-                "kids": 0,
-                "amount": 0.0,
+                "adults": 0, "kids": 0, "amount": 0.0,
+                "ticket_ids": [], "customer_names": [],
             }
         grouped[key]["adults"] += adults
         grouped[key]["kids"] += kids
         grouped[key]["amount"] += amount
+        if appt_id:
+            grouped[key]["ticket_ids"].append(str(appt_id))
+        if customer_name:
+            grouped[key]["customer_names"].append(customer_name)
 
     if not grouped:
         logger.info("No approved Booknetic bookings found for full sync")
@@ -333,11 +366,13 @@ def sync_all_to_bot_sheet(days_back: int = 30) -> int:
             "Expected adults": data["adults"],
             "Expected kids": data["kids"],
             "Expected amount": round(data["amount"], 2),
+            "Ticket IDs": ", ".join(data["ticket_ids"]),
+            "Customer Names": ", ".join(dict.fromkeys(data["customer_names"])),
         }
         try:
             sheets_client.append_booking_row(new_row)
             existing_keys.add(lookup_key)
-            logger.info("Full sync added %s: %s on %s", bn, service, date_str)
+            logger.info("Full sync added %s: %s on %s | tickets: %s", bn, service, date_str, ", ".join(data["ticket_ids"]))
             added += 1
         except Exception as exc:
             logger.error("Full sync failed for %s on %s: %s", service, date_str, exc)

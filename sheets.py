@@ -51,6 +51,8 @@ def _retry_on_api_error(func: Callable) -> Callable:
     return wrapper
 
 _BOT_COLUMNS = [
+    "Ticket IDs",
+    "Customer Names",
     "Confirmed",
     "Actual adults",
     "Actual kids",
@@ -252,6 +254,8 @@ class SheetsClient:
                     "expected_adults": self._col("Expected adults", row, 0),
                     "expected_kids": self._col("Expected kids", row, 0),
                     "expected_amount": self._col("Expected amount", row, 0),
+                    "ticket_ids": str(self._col("Ticket IDs", row, "")),
+                    "customer_names": str(self._col("Customer Names", row, "")),
                     "row_index": sheet_row_idx,
                 }
             )
